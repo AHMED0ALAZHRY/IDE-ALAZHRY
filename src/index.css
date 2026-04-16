@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-royal-gold: #D4AF37;
+  --color-royal-gold-dark: #AA8C2C;
+  --color-nile-blue: #1A365D;
+  --color-nile-blue-light: #2A4A7F;
+  --color-ivory-white: #FFFFF0;
+  --color-ivory-dark: #F5F5DC;
+  
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background-color: var(--color-ivory-white);
+  color: var(--color-nile-blue);
+  font-family: var(--font-sans);
+}

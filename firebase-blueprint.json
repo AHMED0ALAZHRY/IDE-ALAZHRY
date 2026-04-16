@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Monument": {
+      "title": "Monument",
+      "description": "Historical monument details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["إسلامي", "ثقافي", "فرعوني", "قبطي", "روماني"] },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" }
+      },
+      "required": ["name", "type", "location", "description", "latitude", "longitude"]
+    },
+    "Guide": {
+      "title": "Guide",
+      "description": "Tour guide details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "rating": { "type": "number" },
+        "languages": { "type": "array", "items": { "type": "string" } },
+        "phone": { "type": "string" },
+        "monumentId": { "type": "string" }
+      },
+      "required": ["name", "rating", "languages"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/monuments/{monumentId}": {
+      "schema": { "$ref": "#/entities/Monument" },
+      "description": "Monuments directory"
+    },
+    "/guides/{guideId}": {
+      "schema": { "$ref": "#/entities/Guide" },
+      "description": "Tour guides directory"
+    }
+  }
+}
