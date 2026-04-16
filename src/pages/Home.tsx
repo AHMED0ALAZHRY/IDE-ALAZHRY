@@ -29,7 +29,7 @@ export default function Home() {
             <h1 className="text-2xl font-bold">مرحباً بك في فكرة أثر</h1>
             <p className="text-sm text-gray-300 mt-1">اكتشف تاريخ مصر العظيم</p>
           </div>
-          <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-inner overflow-hidden border-2 border-royal-gold/20">
+          <div className="w-14 h-14 overflow-hidden rounded-2xl shadow-lg border-2 border-white/10">
             <img src="/logo.png" alt="شعار فكرة أثر" className="w-full h-full object-cover" />
           </div>
         </div>

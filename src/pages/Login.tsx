@@ -28,7 +28,7 @@ export default function Login() {
       <div className="absolute bottom-[-10%] left-[-10%] w-80 h-80 bg-nile-blue opacity-10 rounded-full blur-3xl"></div>
 
       <div className="z-10 flex flex-col items-center w-full max-w-md">
-        <div className="w-32 h-32 bg-white rounded-3xl shadow-xl mb-6 overflow-hidden border-4 border-white">
+        <div className="w-32 h-32 rounded-3xl shadow-xl mb-6 overflow-hidden">
           <img src="/logo.png" alt="شعار فكرة أثر" className="w-full h-full object-cover" />
         </div>
         
