@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import { useMonuments } from '../hooks/useMonuments';
-import { Navigation as NavIcon, MapPin, ArrowLeft } from 'lucide-react';
+import { Navigation as NavIcon, MapPin, ArrowLeft, LocateFixed } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -57,36 +57,105 @@ export default function MapScreen() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [nearestMonument, setNearestMonument] = useState<any>(null);
   const [distance, setDistance] = useState<number | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
 
   // Default center (Cairo)
   const defaultCenter: [number, number] = [30.0444, 31.2357];
 
-  useEffect(() => {
-    // Simulate getting user location (using Cairo coordinates for demo)
-    // In a real app, use navigator.geolocation.getCurrentPosition
-    const demoLocation: [number, number] = [30.0330, 31.2500];
-    setUserLocation(demoLocation);
+  // Haversine formula to calculate true distance in km
+  const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+  };
 
+  const findNearestMonument = (location: [number, number]) => {
     if (monuments.length > 0) {
-      // Calculate nearest monument (simplified distance calculation)
       let minDistance = Infinity;
       let nearest = null;
 
       monuments.forEach(monument => {
-        const d = Math.sqrt(
-          Math.pow(monument.coordinates.lat - demoLocation[0], 2) + 
-          Math.pow(monument.coordinates.lng - demoLocation[1], 2)
-        );
-        if (d < minDistance) {
-          minDistance = d;
-          nearest = monument;
+        const lat = monument.coordinates?.lat ?? monument.latitude;
+        const lng = monument.coordinates?.lng ?? monument.longitude;
+        
+        if (lat !== undefined && lng !== undefined) {
+          const distanceInKm = getDistanceFromLatLonInKm(lat, lng, location[0], location[1]);
+          
+          if (distanceInKm < minDistance) {
+            minDistance = distanceInKm;
+            nearest = monument;
+          }
         }
       });
 
       if (nearest) {
         setNearestMonument(nearest);
-        // Rough conversion to meters (very simplified)
-        setDistance(Math.round(minDistance * 111000));
+        setDistance(Math.round(minDistance * 1000)); // Convert km to meters
+      }
+    }
+  };
+
+  const locateUser = () => {
+    setIsLocating(true);
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLocation: [number, number] = [position.coords.latitude, position.coords.longitude];
+          setUserLocation(newLocation);
+          findNearestMonument(newLocation);
+          setIsLocating(false);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          alert("تعذر تحديد موقعك. يرجى التأكد من تشغيل الـ GPS ومنح التطبيق صلاحية الوصول للموقع.");
+          setUserLocation(defaultCenter);
+          findNearestMonument(defaultCenter);
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    } else {
+      alert("متصفحك لا يدعم خاصية تحديد الموقع.");
+      setUserLocation(defaultCenter);
+      findNearestMonument(defaultCenter);
+      setIsLocating(false);
+    }
+  };
+
+  // Initial setup (try to get real location immediately)
+  useEffect(() => {
+    if (monuments.length > 0) {
+      if (!userLocation) {
+        setIsLocating(true);
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const newLocation: [number, number] = [position.coords.latitude, position.coords.longitude];
+              setUserLocation(newLocation);
+              findNearestMonument(newLocation);
+              setIsLocating(false);
+            },
+            (error) => {
+              console.error("Error getting initial location:", error);
+              setUserLocation(defaultCenter);
+              findNearestMonument(defaultCenter);
+              setIsLocating(false);
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        } else {
+          setUserLocation(defaultCenter);
+          findNearestMonument(defaultCenter);
+          setIsLocating(false);
+        }
+      } else {
+        findNearestMonument(userLocation); // Recalculate if monuments change
       }
     }
   }, [monuments]);
@@ -115,43 +184,69 @@ export default function MapScreen() {
             center={defaultCenter} 
             zoom={11} 
             style={{ height: '100%', width: '100%' }}
-            zoomControl={false}
+            zoomControl={true}
+            scrollWheelZoom={true}
+            dragging={true}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             
             <LocationMarker position={userLocation} />
 
-            {monuments.map(monument => (
-              <Marker 
-                key={monument.id} 
-                position={[monument.coordinates.lat, monument.coordinates.lng]}
-                icon={monumentIcon}
-              >
-                <Popup>
-                  <div className="text-right" dir="rtl">
-                    <h3 className="font-bold text-nile-blue mb-1">{monument.name}</h3>
-                    <p className="text-xs text-gray-500 mb-2">{monument.type}</p>
-                    <button 
-                      onClick={() => navigate(`/monument/${monument.id}`)}
-                      className="bg-royal-gold text-white px-3 py-1 rounded text-xs font-bold"
-                    >
-                      التفاصيل
-                    </button>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+            {monuments.map(monument => {
+              const lat = monument.coordinates?.lat ?? monument.latitude;
+              const lng = monument.coordinates?.lng ?? monument.longitude;
+              
+              if (lat === undefined || lng === undefined) return null;
+
+              return (
+                <Marker 
+                  key={monument.id} 
+                  position={[lat, lng]}
+                  icon={monumentIcon}
+                >
+                  <Popup>
+                    <div className="text-right" dir="rtl">
+                      <h3 className="font-bold text-nile-blue mb-1">{monument.name}</h3>
+                      <p className="text-xs text-gray-500 mb-2">{monument.type}</p>
+                      <button 
+                        onClick={() => navigate(`/monument/${monument.id}`)}
+                        className="bg-royal-gold text-white px-3 py-1 rounded text-xs font-bold"
+                      >
+                        التفاصيل
+                      </button>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
           </MapContainer>
         )}
       </div>
 
       {/* Nearest Monument Card */}
       {nearestMonument && distance !== null && !loading && (
-        <div className="absolute bottom-20 left-4 right-4 z-10">
-          <div className="bg-white rounded-2xl shadow-lg p-4 border border-gray-100 flex items-center gap-4">
+        <div className="absolute bottom-20 left-4 right-4 z-50 flex flex-col items-end gap-3 pointer-events-none">
+          
+          {/* Action button container */}
+          <div className="pointer-events-auto">
+            <button 
+              onClick={locateUser}
+              disabled={isLocating}
+              className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-nile-blue hover:text-royal-gold transition-colors disabled:opacity-50 border border-gray-100"
+              title="تحديد موقعي"
+            >
+              {isLocating ? (
+                <div className="w-5 h-5 border-2 border-nile-blue border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <LocateFixed size={22} />
+              )}
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-4 border border-gray-100 flex items-center gap-4 w-full pointer-events-auto">
             <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0">
               <img src={nearestMonument.imageUrl} alt={nearestMonument.name} className="w-full h-full object-cover" />
             </div>
