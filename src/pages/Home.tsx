@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Filter } from 'lucide-react';
 import { useMonuments } from '../hooks/useMonuments';
+import { motion, AnimatePresence } from 'motion/react';
 
 const CATEGORIES = ['الكل', 'إسلامي', 'فرعوني', 'قبطي', 'روماني'];
 const LOCATIONS = ['الكل', 'القاهرة', 'الجيزة', 'الإسكندرية', 'الأقصر', 'أسوان'];
@@ -21,9 +22,19 @@ export default function Home() {
   });
 
   return (
-    <div className="pb-20 min-h-screen bg-ivory-white">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="pb-20 min-h-screen bg-ivory-white"
+    >
       {/* Header */}
-      <header className="bg-nile-blue text-white p-6 rounded-b-3xl shadow-lg">
+      <motion.header 
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", bounce: 0.3, duration: 0.8 }}
+        className="bg-nile-blue text-white p-6 rounded-b-3xl shadow-lg"
+      >
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold">مرحباً بك في فكرة أثر</h1>
@@ -45,7 +56,7 @@ export default function Home() {
           />
           <Search className="absolute right-4 top-3.5 text-gray-400" size={20} />
         </div>
-      </header>
+      </motion.header>
 
       <main className="p-4">
         {/* Filters */}
@@ -96,21 +107,40 @@ export default function Home() {
         </div>
 
         {/* Monuments List */}
-        <div className="space-y-4">
+        <motion.div 
+          layout
+          className="space-y-4"
+        >
+          <AnimatePresence mode="popLayout">
           {loading ? (
-            <div className="text-center py-10">
+            <motion.div 
+              key="loader"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-center py-10"
+            >
               <div className="w-8 h-8 border-4 border-royal-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
               <p className="text-gray-500">جاري تحميل المعالم...</p>
-            </div>
+            </motion.div>
           ) : filteredMonuments.length > 0 ? (
-            filteredMonuments.map(monument => (
-              <div
+            filteredMonuments.map((monument, i) => (
+              <motion.div
+                layout
                 key={monument.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ delay: i * 0.1, type: "spring", bounce: 0.3 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => navigate(`/monument/${monument.id}`)}
                 className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-gray-100"
               >
                 <div className="h-48 overflow-hidden relative">
-                  <img
+                  <motion.img
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ duration: 0.4 }}
                     src={monument.imageUrl}
                     alt={monument.name}
                     className="w-full h-full object-cover"
@@ -126,15 +156,22 @@ export default function Home() {
                     {monument.location}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))
           ) : (
-            <div className="text-center py-10 text-gray-500">
+            <motion.div 
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-center py-10 text-gray-500"
+            >
               لا توجد معالم مطابقة لبحثك
-            </div>
+            </motion.div>
           )}
-        </div>
+          </AnimatePresence>
+        </motion.div>
       </main>
-    </div>
+    </motion.div>
   );
 }
