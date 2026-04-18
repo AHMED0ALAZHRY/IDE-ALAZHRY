@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Info, Headphones, Video, MapPin, Star, Play, Pause, MessageCircle, ThumbsUp, Send, User as UserIcon } from 'lucide-react';
+import { ArrowRight, Info, Headphones, Video, MapPin, Star, Play, Pause, MessageCircle, ThumbsUp, Send, User as UserIcon, Heart } from 'lucide-react';
 import { mockGuides, mockReviews as initialMockReviews } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { useMonuments } from '../hooks/useMonuments';
+import { db } from '../firebase';
+import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, collection, addDoc } from 'firebase/firestore';
 
 export default function MonumentProfile() {
   const { id } = useParams();
@@ -23,6 +25,65 @@ export default function MonumentProfile() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
 
+  // Favorites state
+  const [isFavorited, setIsFavorited] = useState(false);
+
+  const [monumentGuides, setMonumentGuides] = useState<any[]>([]);
+  const [bookingFormData, setBookingFormData] = useState({ date: '', time: '' });
+  const [bookingGuideId, setBookingGuideId] = useState<string | null>(null);
+  const [showBookingSuccess, setShowBookingSuccess] = useState(false);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+  const [selectedGuideForView, setSelectedGuideForView] = useState<any | null>(null);
+  const [guideRatingForm, setGuideRatingForm] = useState({ rating: 5, comment: '' });
+
+  useEffect(() => {
+    if (user && !isGuest && id) {
+      const userRef = doc(db, 'users', user.uid);
+      
+      // Update history array by removing and re-adding at the end (handled by tracking logic, but for simplicity arrayUnion here, then unique tracking if needed, but arrayUnion just adds it if not exists. We can also just use arrayUnion and sort later).
+      // Or we can just read first, then update.
+      getDoc(userRef).then(docSnap => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.favorites?.includes(id)) {
+            setIsFavorited(true);
+          }
+          let newHistory = data.history || [];
+          newHistory = newHistory.filter((h: string) => h !== id); // Remove if exists
+          newHistory.push(id); // Add to end
+          updateDoc(userRef, { history: newHistory }).catch(err => console.error(err));
+        }
+      }).catch(err => console.error("Error reading user data", err));
+    }
+  }, [user, isGuest, id]);
+
+  useEffect(() => {
+    // Fetch guides from DB (For simplicity, fetching all, but you can filter by availability or just assign to monument. For now we show all guides as available for booking in MVP)
+    const unsub = onSnapshot(collection(db, 'guides'), (snapshot) => {
+      setMonumentGuides(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsub();
+  }, []);
+
+  const toggleFavorite = async () => {
+    if (isGuest || !user) {
+      alert("الرجاء تسجيل الدخول لحفظ المعالم المفضلة");
+      return;
+    }
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      if (isFavorited) {
+        await updateDoc(userRef, { favorites: arrayRemove(id) });
+        setIsFavorited(false);
+      } else {
+        await updateDoc(userRef, { favorites: arrayUnion(id) });
+        setIsFavorited(true);
+      }
+    } catch (error) {
+      console.error("Error toggling favorite", error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-ivory-white">
@@ -35,7 +96,55 @@ export default function MonumentProfile() {
     return <div className="p-6 text-center">المعلم غير موجود</div>;
   }
 
-  const monumentGuides = mockGuides.filter(g => g.monumentId === id);
+  const handleBooking = async (guideId: string, guideName: string) => {
+    if (isGuest || !user) {
+      alert("الرجاء تسجيل الدخول لحجز مرشد سياحي");
+      return;
+    }
+    if (!bookingFormData.date || !bookingFormData.time) {
+      alert("الرجاء تحديد تاريخ ووقت الجولة");
+      return;
+    }
+    
+    setIsSubmittingBooking(true);
+    try {
+      await addDoc(collection(db, 'bookings'), {
+        userId: user.uid,
+        userName: user.displayName || 'مستخدم',
+        userEmail: user.email,
+        guideId: guideId,
+        guideName: guideName,
+        monumentId: id,
+        monumentName: monument?.name,
+        date: bookingFormData.date,
+        time: bookingFormData.time,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      });
+      
+      // Trigger Email Notification via Backend
+      fetch('/api/send-booking-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: user.email,
+          userName: user.displayName || 'مستخدم',
+          guideName: guideName,
+          monumentName: monument?.name,
+          date: bookingFormData.date,
+          time: bookingFormData.time
+        })
+      }).catch(err => console.error("Email API Error:", err));
+
+      setBookingGuideId(null);
+      setShowBookingSuccess(true);
+    } catch (e: any) {
+      console.error(e);
+      alert('خطأ أثناء الحجز: ' + e.message);
+    } finally {
+      setIsSubmittingBooking(false);
+    }
+  };
 
   const handleSubmitReview = () => {
     if (!newReviewText.trim() || isGuest) return;
@@ -159,6 +268,13 @@ export default function MonumentProfile() {
           <ArrowRight size={24} />
         </button>
 
+        <button 
+          onClick={toggleFavorite}
+          className="absolute top-4 left-4 w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white/40 transition-colors"
+        >
+          <Heart size={20} className={isFavorited ? "fill-red-500 text-red-500" : ""} />
+        </button>
+
         <div className="absolute bottom-4 right-4 left-4 text-white">
           <div className="inline-block bg-royal-gold text-xs font-bold px-3 py-1 rounded-full mb-2">
             {monument.type}
@@ -256,22 +372,72 @@ export default function MonumentProfile() {
               <div className="space-y-4">
                 {monumentGuides.length > 0 ? (
                   monumentGuides.map(guide => (
-                    <div key={guide.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center text-xl">
-                          👤
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-nile-blue">{guide.name}</h4>
-                          <div className="flex items-center text-sm text-gray-500 mt-1">
-                            <Star size={14} className="text-royal-gold ml-1 fill-royal-gold" />
-                            {guide.rating} • {guide.languages.join('، ')}
+                    <div key={guide.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center text-xl overflow-hidden">
+                            {guide.imageUrl ? <img src={guide.imageUrl} className="w-full h-full object-cover" /> : '👤'}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-nile-blue">{guide.name}</h4>
+                            <div className="flex items-center text-sm text-gray-500 mt-1">
+                              <Star size={14} className="text-royal-gold ml-1 fill-royal-gold" />
+                              {guide.rating} • {guide.languages && Array.isArray(guide.languages) ? guide.languages.join('، ') : guide.languages}
+                            </div>
                           </div>
                         </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => setSelectedGuideForView(guide)}
+                            className="bg-gray-100 text-nile-blue hover:bg-gray-200 px-3 py-2 rounded-lg text-sm font-bold transition-colors"
+                          >
+                            التفاصيل
+                          </button>
+                          <button 
+                            onClick={() => setBookingGuideId(bookingGuideId === guide.id ? null : guide.id)}
+                            className={`${bookingGuideId === guide.id ? 'bg-royal-gold text-white' : 'bg-nile-blue text-white hover:bg-nile-blue-light'} px-4 py-2 rounded-lg text-sm font-bold transition-colors`}
+                          >
+                            {bookingGuideId === guide.id ? 'إلغاء' : 'حجز'}
+                          </button>
+                        </div>
                       </div>
-                      <button className="bg-nile-blue text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-nile-blue-light transition-colors">
-                        حجز
-                      </button>
+                      
+                      {bookingGuideId === guide.id && (
+                        <div className="mt-2 pt-3 border-t border-gray-100 animate-in fade-in slide-in-from-top-2">
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">تاريخ الجولة</label>
+                              <input 
+                                type="date" 
+                                value={bookingFormData.date}
+                                onChange={e => setBookingFormData({...bookingFormData, date: e.target.value})}
+                                className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-royal-gold outline-none" 
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 mb-1">وقت الجولة (مقترح)</label>
+                              <select 
+                                value={bookingFormData.time}
+                                onChange={e => setBookingFormData({...bookingFormData, time: e.target.value})}
+                                className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-royal-gold outline-none" 
+                              >
+                                <option value="">اختر الوقت</option>
+                                <option value="09:00 صباحاً">09:00 صباحاً</option>
+                                <option value="11:00 صباحاً">11:00 صباحاً</option>
+                                <option value="02:00 مساءً">02:00 مساءً</option>
+                                <option value="04:00 مساءً">04:00 مساءً</option>
+                              </select>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => handleBooking(guide.id, guide.name)}
+                            disabled={isSubmittingBooking}
+                            className="w-full bg-nile-blue text-white py-2 rounded-lg text-sm font-bold shadow-sm disabled:opacity-50"
+                          >
+                            {isSubmittingBooking ? 'جاري التأكيد...' : 'تأكيد الحجز'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))
                 ) : (
@@ -281,6 +447,86 @@ export default function MonumentProfile() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Booking Success Modal */}
+        {showBookingSuccess && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center animate-in zoom-in duration-300">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ThumbsUp size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-nile-blue mb-2">تم تأكيد طلبك مبدئياً! 🌟</h3>
+              <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+                تم إرسال رسالة إلى بريدك الإلكتروني <span className="font-bold text-nile-blue" dir="ltr">{user?.email}</span> تحتوي على تفاصيل الجولة.<br/>أهلاً بك في رحلة عبر الزمن مع أثر، سيقوم المرشد بالتواصل معك قريباً لتأكيد الموعد النهائي.
+              </p>
+              <button 
+                onClick={() => setShowBookingSuccess(false)}
+                className="w-full bg-nile-blue text-white py-3 rounded-xl font-bold hover:bg-nile-blue-light transition-colors"
+              >
+                حسناً، شكراً
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Guide Details & Rating Modal */}
+        {selectedGuideForView && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-sm w-full p-6 animate-in zoom-in duration-300 flex flex-col max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-nile-blue">بيانات المرشد</h3>
+                <button onClick={() => setSelectedGuideForView(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              </div>
+              
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center text-xl overflow-hidden">
+                  {selectedGuideForView.imageUrl ? <img src={selectedGuideForView.imageUrl} className="w-full h-full object-cover" /> : '👤'}
+                </div>
+                <div>
+                  <h4 className="font-bold text-nile-blue text-lg">{selectedGuideForView.name}</h4>
+                  <div className="flex items-center text-sm text-gray-500 mt-1">
+                    <Star size={14} className="text-royal-gold ml-1 fill-royal-gold" />
+                    {selectedGuideForView.rating}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded-lg mb-4 text-sm text-gray-700">
+                <p className="mb-2"><strong className="text-nile-blue">اللغات:</strong> {selectedGuideForView.languages && Array.isArray(selectedGuideForView.languages) ? selectedGuideForView.languages.join('، ') : selectedGuideForView.languages || 'العربية'}</p>
+                <p><strong className="text-nile-blue">النبذة:</strong> {selectedGuideForView.description || 'مرشد سياحي معتمد بوزارة السياحة.'}</p>
+              </div>
+
+              <h4 className="font-bold text-nile-blue mb-2">إضافة تقييم للمرشد</h4>
+              <div className="flex gap-2 mb-3 justify-center">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button key={star} onClick={() => setGuideRatingForm({...guideRatingForm, rating: star})}>
+                    <Star 
+                      size={28} 
+                      className={star <= guideRatingForm.rating ? 'fill-royal-gold text-royal-gold' : 'text-gray-300'} 
+                    />
+                  </button>
+                ))}
+              </div>
+              <textarea 
+                placeholder="شاركنا رأيك في المرشد (اختياري)..."
+                value={guideRatingForm.comment}
+                onChange={(e) => setGuideRatingForm({...guideRatingForm, comment: e.target.value})}
+                className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-royal-gold outline-none resize-none mb-3"
+                rows={3}
+              />
+              <button 
+                onClick={() => {
+                  alert("شكراً لك! تم إرسال تقييمك للمرشد بنجاح.");
+                  setSelectedGuideForView(null);
+                  setGuideRatingForm({ rating: 5, comment: '' });
+                }}
+                className="w-full bg-royal-gold text-white py-2 rounded-lg font-bold shadow-sm"
+              >
+                إرسال التقييم
+              </button>
+            </div>
           </div>
         )}
 

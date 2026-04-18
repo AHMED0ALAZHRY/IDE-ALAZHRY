@@ -14,8 +14,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isPrimaryAdmin() {
+      return request.auth != null && request.auth.token.email == "alazhryahmd006@gmail.com";
+    }
+
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.email == "alazhryahmd006@gmail.com";
+      return isPrimaryAdmin() || (request.auth != null && exists(/databases/$(database)/documents/supervisors/$(request.auth.token.email)));
     }
     
     function isValidUser(data) {
@@ -29,6 +33,15 @@ service cloud.firestore {
     // Rules
     // ===============================================================
     
+    match /supervisors/{supervisorEmail} {
+      // Primary admin can list all supervisors
+      allow list: if isPrimaryAdmin();
+      // Primary admin or the supervisor themselves can read the single document
+      allow get: if isPrimaryAdmin() || (request.auth != null && request.auth.token.email == supervisorEmail);
+      // Only primary admin can write
+      allow write: if isPrimaryAdmin();
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.uid == userId;
@@ -44,6 +57,20 @@ service cloud.firestore {
     match /guides/{guideId} {
       allow read: if true; // Publicly readable
       allow write: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if (isAuthenticated() && request.resource.data.userId == request.auth.uid) || isAdmin();
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'cancelled');
+      allow delete: if isAdmin();
     }
   }
 }

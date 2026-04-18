@@ -41,7 +41,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             photoURL: currentUser.photoURL,
             createdAt: new Date().toISOString()
           });
+        } else {
+          // Check for theme
+          const data = userSnap.data();
+          if (data?.settings?.theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
         }
+      } else {
+        document.documentElement.classList.remove('dark');
       }
       setLoading(false);
     });

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
 @theme {
   --color-royal-gold: #D4AF37;
   --color-royal-gold-dark: #AA8C2C;
@@ -15,4 +17,33 @@ body {
   background-color: var(--color-ivory-white);
   color: var(--color-nile-blue);
   font-family: var(--font-sans);
+}
+
+.dark body {
+  background-color: #0F172A;
+  color: #F8FAFC;
+}
+
+.dark .bg-white {
+  background-color: #1E293B;
+}
+
+.dark .bg-ivory-white {
+  background-color: #0F172A;
+}
+
+.dark .text-nile-blue {
+  color: #94A3B8;
+}
+
+.dark .border-gray-100 {
+  border-color: #334155;
+}
+
+.dark .text-gray-800, .dark .text-gray-700 {
+  color: #E2E8F0;
+}
+
+.dark .bg-gray-50 {
+  background-color: #1E293B;
 }

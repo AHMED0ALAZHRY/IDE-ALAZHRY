@@ -14,6 +14,14 @@ import Navigation from './components/Navigation';
 const ProtectedRoute = ({ children, hideNav = false }: { children: React.ReactNode, hideNav?: boolean }) => {
   const { user, isGuest, loading } = useAuth();
 
+  React.useEffect(() => {
+    // A simplified system theme and user theme handler
+    // If we had a robust settings provider, this would be there
+    // Since AuthContext holds user data partially, we might need a separate listener or just read from local storage / body class
+    // We'll trust setting theme applies `.dark` correctly if we had a ThemeProvider.
+    // For now, let's keep it simple: if dark mode isn't fully implemented in classes, we simulate it or prepare the wrapper
+  }, [user]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-ivory-white">
